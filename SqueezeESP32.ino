@@ -5,6 +5,8 @@
     #include <WiFi.h>
 #else
     #include <ESP8266WiFi.h>
+    #include "ESP8266HTTPClient.h"
+    #include "ESP8266httpUpdate.h"
 #endif
 
 #include <WiFiUdp.h>
@@ -68,6 +70,8 @@ int       viCnxAttempt = -1;
 
 WiFiUDP udp;
 
+long lastRetry;
+
 #ifdef VS1053_MODULE
 void LoadPlugin(const uint16_t* plugin, uint16_t plugin_size)
 {
@@ -106,11 +110,7 @@ while (i<plugin_size)
 }
 
 #endif //VS1053_MODULE
-void setup()
-{
-
-
-  
+void setup() {
   viCnxAttempt = 0;
   
   Serial.begin(115200);
@@ -164,10 +164,24 @@ void setup()
 }
 
 
-void loop()
-{
-   
+void loop() {
+  t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.0.1", 80, "/esp8266/ota.php", "0.1");
 
+  switch(ret) {
+    case HTTP_UPDATE_FAILED:
+      Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+      break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+      Serial.println("HTTP_UPDATE_NO_UPDATES");
+      break;
+
+    case HTTP_UPDATE_OK:
+      ESP.eraseConfig();
+      Serial.println("HTTP_UPDATE_OK");
+      break;
+  }
+  
    // Reset addr of LMS
    if(viCnxAttempt == -1)
     LMS_addr = IPAddress(0,0,0,0);
