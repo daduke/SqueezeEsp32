@@ -186,6 +186,15 @@ public:
 			int HandleMessages();
      
       int HandleAudio();
+
+      enum player_status {
+          StopStatus,
+          PlayStatus,
+          PauseStatus
+      };
+ int foo =0;
+
+      player_status vcPlayerStat = StopStatus ;    /* 0 = stop , 1 = play , 2 = pause */
 			
 private:
 
@@ -247,14 +256,7 @@ private:
          VS1053 * vcplayer;
       #endif
 
-      enum player_status {
-          StopStatus,
-          PlayStatus,
-          PauseStatus
-        };
 
-
-      player_status vcPlayerStat = StopStatus ;    /* 0 = stop , 1 = play , 2 = pause */
 
       
 
