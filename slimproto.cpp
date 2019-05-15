@@ -122,7 +122,7 @@ int    viSizeRead;
     vcCommandSize = (viExtractSize[0] << 8) | viExtractSize[1];
 
     if(vcCommandSize != 172)
-      Serial.print("Expected command size : "), Serial.println(vcCommandSize);  
+      if (DEBUG) Serial.print("Expected command size : "), Serial.println(vcCommandSize);  
     }
 
 
@@ -134,7 +134,7 @@ int    viSizeRead;
     Serial.print("Available size : "),Serial.println(availableSize);
     uint8_t  viExtractCommand[availableSize];
     viSizeRead =  vcClient->read(viExtractCommand,availableSize);
-    PrintByteArray(viExtractCommand,viSizeRead );
+    if (DEBUG) PrintByteArray(viExtractCommand,viSizeRead );
     vcCommandSize = 0;
     }
 
@@ -151,7 +151,7 @@ int    viSizeRead;
       }
 
     if(vcCommandSize != 172)
-      PrintByteArray(viExtractCommand,viSizeRead);
+      if (DEBUG) PrintByteArray(viExtractCommand,viSizeRead);
 
     HandleCommand(viExtractCommand,viSizeRead); 
     vcCommandSize = 0; 
@@ -176,96 +176,88 @@ return true;
 
 
 
-int slimproto::HandleAudio()
-{
-// Lire des données du stream et les envoyer dans le vs1053      
-uint32_t viRead;
-__attribute__((aligned(4))) uint8_t buf[32] ; // Buffer for chunk
+int slimproto::HandleAudio() {
+  // Lire des données du stream et les envoyer dans le vs1053      
+  uint32_t viRead;
+  __attribute__((aligned(4))) uint8_t buf[32] ; // Buffer for chunk
  
-if(vcStreamClient.connected())
-  {
-  viRead =  vcStreamClient.available() ;
-
-   while (vcRingBuffer->isFreeSpace() && viRead-- )
-      {
+  if (vcStreamClient.connected()) {
+    viRead =  vcStreamClient.available() ;
+    
+    while (vcRingBuffer->isFreeSpace() && viRead-- ) {
       vcRingBuffer->putData(vcStreamClient.read()) ;                // Yes, store one byte in ringbuffer
       yield() ;
-      }
-        
-  if(millis() - TimeCounter >= ( 5 * 1000))
-   {
-   TimeCounter = millis();
-   Serial.print("Audio : RingBuffer Size : ");
-   Serial.print(vcRingBuffer->dataSize());
-   Serial.print(" / ");
-   Serial.println(vcRingBuffer->getBufferSize());
-   }
-  }
- else
-  {
-  // End of stream
-  
-  if(vcPlayerStat == PlayStatus)
-    {
-    vcPlayerStat = PauseStatus;    /* 0 = stop , 1 = play , 2 = pause */
-
-    EndTimeCurrentSong = millis();
-
-    // Stream buffer empty
-    reponseSTAT viResponse(vcClient);
-    memcpy((void *) viResponse.vcResponse.event, "STMd", 4);
-    viResponse.vcResponse.bytes_received_L = ByteReceivedCurrentSong;
-
-    viResponse.vcResponse.elapsed_seconds =  (EndTimeCurrentSong - StartTimeCurrentSong)/ 1000;
-    viResponse.sendResponse();
-
-    reponseSTAT viResponseU(vcClient);
-    memcpy((void *) viResponseU.vcResponse.event, "STMu", 4);
-    viResponseU.vcResponse.bytes_received_L = ByteReceivedCurrentSong;
-
-    viResponseU.vcResponse.elapsed_seconds =  (EndTimeCurrentSong - StartTimeCurrentSong)/ 1000;
-    viResponseU.sendResponse();
     }
-
-  if(millis() - TimeCounter >= ( 5 * 1000))
-   {
-   TimeCounter = millis();
-   Serial.println("Audio : Streaming not connected");
-   }  
+    
+    if (millis() - TimeCounter >= ( 5 * 1000)) {
+      TimeCounter = millis();
+      Serial.print("Audio : RingBuffer Size : ");
+      Serial.print(vcRingBuffer->dataSize());
+      Serial.print(" / ");
+      Serial.println(vcRingBuffer->getBufferSize());
+      yield();
+    }
+  } else {
+    // End of stream
+    
+    if (vcPlayerStat == PlayStatus) {
+      vcPlayerStat = PauseStatus;    /* 0 = stop , 1 = play , 2 = pause */
+    
+      EndTimeCurrentSong = millis();
+      
+      // Stream buffer empty
+      reponseSTAT viResponse(vcClient);
+      memcpy((void *) viResponse.vcResponse.event, "STMd", 4);
+      viResponse.vcResponse.bytes_received_L = ByteReceivedCurrentSong;
+      
+      viResponse.vcResponse.elapsed_seconds =  (EndTimeCurrentSong - StartTimeCurrentSong)/ 1000;
+      viResponse.sendResponse();
+      
+      reponseSTAT viResponseU(vcClient);
+      memcpy((void *) viResponseU.vcResponse.event, "STMu", 4);
+      viResponseU.vcResponse.bytes_received_L = ByteReceivedCurrentSong;
+      
+      viResponseU.vcResponse.elapsed_seconds =  (EndTimeCurrentSong - StartTimeCurrentSong)/ 1000;
+      viResponseU.sendResponse();
+    }
+    
+    if(millis() - TimeCounter >= ( 5 * 1000)) {
+      TimeCounter = millis();
+      Serial.println("Audio : Streaming not connected");
+    }  
   }
 
-/*
-if(vcStreamClient.connected())
-  {
-   if(vcplayer->readyForData())
-     Serial.println("VS1053 ready for data");
-  }
-*/
+  /*
+  if(vcStreamClient.connected())
+    {
+     if(vcplayer->readyForData())
+       Serial.println("VS1053 ready for data");
+    }
+  */
   // Send data to the vs1053 if available
   #ifdef ADAFRUIT_VS1053
     while(vcplayer->readyForData() && vcRingBuffer->dataSize()> 0) // Try to keep VS1053 filled
   #else
     while(vcplayer->data_request() && vcRingBuffer->dataSize()> 0) // Try to keep VS1053 filled
   #endif
-      {
-      int viByteRetrieve = 0;
-      
-      // Get Max 32 byte of data from the RingBuffer
-      while(vcRingBuffer->dataSize() && viByteRetrieve < 32 )
-        {
-        buf[viByteRetrieve++] =  vcRingBuffer->getData();
-        }
-
-      ByteReceivedCurrentSong += viByteRetrieve;
-     
-      #ifdef ADAFRUIT_VS1053
-        vcplayer->playData (buf, viByteRetrieve) ;
-      #else
-        vcplayer->playChunk (buf, viByteRetrieve) ;
-      #endif
-
-      yield() ;
-      } 
+  {
+    int viByteRetrieve = 0;
+    
+    // Get Max 32 byte of data from the RingBuffer
+    while(vcRingBuffer->dataSize() && viByteRetrieve < 32 ) {
+      buf[viByteRetrieve++] =  vcRingBuffer->getData();
+    }
+    
+    ByteReceivedCurrentSong += viByteRetrieve;
+    
+    #ifdef ADAFRUIT_VS1053
+      vcplayer->playData (buf, viByteRetrieve) ;
+    #else
+      vcplayer->playChunk (buf, viByteRetrieve) ;
+    #endif
+    
+    yield() ;
+  } 
 }
 
 /**
@@ -323,7 +315,7 @@ viResponse.sendResponse();
 LastStatMsg = millis();
 
 //debug 
-PrintByteArray((byte *)&viResponse.vcResponse, sizeof(viResponse.vcResponse));
+if (DEBUG) PrintByteArray((byte *)&viResponse.vcResponse, sizeof(viResponse.vcResponse));
 
 //vcClient->write(staT, sizeof(staT));	
 }
@@ -409,7 +401,7 @@ Serial.println(viUrl);
     }
 
 
-  Serial.println("Connexion ok"); 
+  Serial.println("Connection ok"); 
   
   Serial.print("Ask for : "),Serial.println(String((char*) viTmpUrl));
   vcStreamClient.print(String("") + String((char*) viTmpUrl) + "\r\n" +
@@ -517,31 +509,31 @@ if(strcmp((const char *)viCommand,"strm") == 0)
 	
 	viSubCmd = (unsigned char) pCommand[4];
 	
-	Serial.print("Sub command : ");
-	Serial.println(viSubCmd);
+	if (DEBUG) Serial.print("Sub command : ");
+	if (DEBUG) Serial.println(viSubCmd);
 	switch (viSubCmd) {
          case 'q':
-             Serial.println("Sub command q (stop)");
+             if (DEBUG) Serial.println("Sub command q (stop)");
 			 HandleStrmQCmd(pCommand,pSize );
              break;			
 		 case 't':
-             Serial.println("Sub command t (status)");
+             if (DEBUG) Serial.println("Sub command t (status)");
 			 HandleStrmTCmd(pCommand,pSize );
              break;
 		case 'p':
-             Serial.println("Sub command p (pause)");
+             if (DEBUG) Serial.println("Sub command p (pause)");
 			 HandleStrmPCmd(pCommand,pSize );
              break;	 
 		case 'u':
-             Serial.println("Sub command u (unpause)");
+             if (DEBUG) Serial.println("Sub command u (unpause)");
 			 HandleStrmUCmd(pCommand,pSize );
              break;				
 		case 's':
-             Serial.println("Sub command s (start)");
+             if (DEBUG) Serial.println("Sub command s (start)");
 			 HandleStrmSCmd(pCommand,pSize );
              break;	 
          default:
-             Serial.println("default SubCommand");
+             if (DEBUG) Serial.println("default SubCommand");
       }
 	}
 else if (strcmp((const char *)viCommand,"vfdc") == 0)

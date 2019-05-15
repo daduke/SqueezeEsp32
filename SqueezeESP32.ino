@@ -155,6 +155,7 @@ void loop() {
         }
         vislimCli->HandleAudio();
     }
+    yield();
 }
 
 void connectToLMS() {
