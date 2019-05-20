@@ -6,7 +6,7 @@
 #ifdef ESP32
   #define RINGBFSIZ 100000
 #else
-  #define RINGBFSIZ 20000
+  #define RINGBFSIZ 15000
 #endif
 
 #include "config.h"
@@ -192,17 +192,14 @@ public:
           PlayStatus,
           PauseStatus
       };
- int foo =0;
-
+      
+      u32_t newvolume;
+     stRingBuffer * vcRingBuffer;
+      unsigned long StartTimeCurrentSong = 0;
+ 
       player_status vcPlayerStat = StopStatus ;    /* 0 = stop , 1 = play , 2 = pause */
 			
 private:
-
-
-     stRingBuffer * vcRingBuffer;
-     //stRingBuffer * vcCommandRingBuf;
-
-
       String vcAdrLMS; 
 
 			int _pin;
@@ -212,7 +209,6 @@ private:
 
        uint8_t*         ringbuf ;                                 // Ringbuffer for VS1053
 
-      unsigned long StartTimeCurrentSong = 0;
       unsigned long EndTimeCurrentSong = 0;
       uint32_t      ByteReceivedCurrentSong = 0;
 

@@ -4,13 +4,20 @@
 #include "slimproto.h"
 #include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
+#include "SSD1306Wire.h"
+#include "OLEDDisplayUi.h"
+#include "Wire.h"
+#include "WeatherStationFonts.h"
+#include <ArduinoJson.h>
 
 #ifdef ESP32
     #include <WiFi.h>
+    #include <HTTPClient.h>
 #else
     #include <ESP8266WiFi.h>
     #include "ESP8266HTTPClient.h"
     #include "ESP8266httpUpdate.h"
+    #include <ESP8266HTTPClient.h>
 #endif
 
 #ifdef VS1053_MODULE
@@ -22,7 +29,7 @@
     #define VS1053_DCS    16  // D0 // 16
     #define VS1053_DREQ   4   // D3 // 4
   #else // ESP8266
-    #define VS1053_CS     D1 // 5
+    #define VS1053_CS     D4 // was D1
     #define VS1053_DCS    D0 // 16
     #define VS1053_DREQ   D3 // 4
   #endif
@@ -47,11 +54,22 @@
 #include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
 #endif
 
+// Display Settings
+const int I2C_DISPLAY_ADDRESS = 0x3c;
+const int SDA_PIN = D1;
+const int SDC_PIN = D2;
+
+// Initialize the oled display for address 0x3c
+SSD1306Wire     display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
+
 slimproto       *vislimCli = 0;
 WiFiClient      client;
 int             viCnxAttempt;
 WiFiUDP         udp;
 long            lastRetry;
+HTTPClient      http;
+DynamicJsonDocument root(1024);
+
 
 #ifdef VS1053_MODULE
 void LoadPlugin(const uint16_t* plugin, uint16_t plugin_size) {
@@ -85,7 +103,15 @@ void LoadPlugin(const uint16_t* plugin, uint16_t plugin_size) {
 }
 #endif //VS1053_MODULE
 
+
 void setup() {
+    // initialize display
+    display.init();
+    display.clear();
+    display.setFont(ArialMT_Plain_10);
+    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.setContrast(255);
+    
     viCnxAttempt = 0;
     WiFiManager wifiManager;
     wifiManager.autoConnect("SqueezeEsp");
@@ -109,27 +135,22 @@ void setup() {
         #endif
     #endif
 
-    /*
-       WiFi.disconnect();
-       WiFi.softAPdisconnect(true);
-       WiFi.mode(WIFI_STA);
-
-       WiFi.begin("ssid","wifipass");
-
-    // Try forever
-    while (WiFi.status() != WL_CONNECTED) {
-    Serial.println("...Connecting to WiFi");
-    delay(1000);
-    }
-    Serial.println("Connected");
-
-     */
+    display.drawString(64, 10, "playing music..");
+    display.display();
+    
     udp.begin(UDP_PORT);
     connectToLMS();
 }
 
+int oldVol;
+int oldBuf;
+const char *oldTitle;
+const char *title;
+const char *artist;
+int progress;
+
 void loop() {
-    if ((millis() - lastRetry) > 30000 && vislimCli->vcPlayerStat != vislimCli->PlayStatus) {
+    if (vislimCli->vcPlayerStat != vislimCli->PlayStatus && (millis() - lastRetry) > 30000) {
         lastRetry = millis();
         t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.0.1", 80, "/esp8266/ota.php", "0.1");
 
@@ -156,6 +177,39 @@ void loop() {
         vislimCli->HandleAudio();
     }
     yield();
+
+
+    int newVol = int(vislimCli->newvolume);
+    if ((millis() - lastRetry) > 3000 || newVol != oldVol) {
+      lastRetry = millis();
+      http.begin("http://192.168.0.1:9000/jsonrpc.js");
+      String req = "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"00:00:00:00:00:01\",[\"status\",\"-\",1,\"tags:ad\"]]}";
+      int httpCode = http.POST(req);   //Send the request
+      deserializeJson(root, http.getString());
+      if (root["result"]["playlist_loop"][0]["title"] != "") {
+        title = root["result"]["playlist_loop"][0]["title"];
+        artist = root["result"]["playlist_loop"][0]["artist"];
+        progress = (int)((lastRetry - vislimCli->StartTimeCurrentSong) / (10*(float)root["result"]["playlist_loop"][0]["duration"]));
+      }
+      http.end();
+   
+      int newBuf = int(vislimCli->vcRingBuffer->dataSize()/vislimCli->vcRingBuffer->getBufferSize()*100);
+      if (newBuf == 0) newBuf = 100;
+      if (newVol != oldVol || newBuf != oldBuf || title != oldTitle) {
+        display.clear();
+        oldVol = newVol;
+        oldBuf = newBuf;
+        oldTitle = title;
+        display.setTextAlignment(TEXT_ALIGN_LEFT);
+
+        display.drawString(0, 0, artist);
+        display.drawString(0, 12, title);
+        drawProgress(&display, progress, "Pro", 26);
+        drawProgress(&display, oldVol, "Vol", 39);
+        drawProgress(&display, oldBuf, "Buf", 52);
+        display.display();        
+      }
+    }
 }
 
 void connectToLMS() {
@@ -238,3 +292,12 @@ void findLMS() {
         }
     }
 }
+
+void drawProgress(OLEDDisplay *display, int percentage, String label, int y) {
+  display->setTextAlignment(TEXT_ALIGN_CENTER);
+  display->setFont(ArialMT_Plain_10);
+  display->drawString(7, y, label);
+  display->drawProgressBar(19, y+1, 108, 10, percentage);
+  display->display();
+}
+

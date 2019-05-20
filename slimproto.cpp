@@ -479,7 +479,7 @@ Serial.print("Volume : ");
 Serial.println(viVol); 
 
 
-u32_t  newvolume = ((100 * log10((viVol*100)/65))/5);
+newvolume = ((100 * log10((viVol*100)/65))/5);
 
 
 Serial.print("new volume  : ");  
