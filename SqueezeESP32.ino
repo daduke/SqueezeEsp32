@@ -10,14 +10,23 @@
 #include "WeatherStationFonts.h"
 #include <ArduinoJson.h>
 
+const int I2C_DISPLAY_ADDRESS = 0x3c;
 #ifdef ESP32
     #include <WiFi.h>
     #include <HTTPClient.h>
+    #include <WebServer.h> 
+    // Display Settings
+    const int SDA_PIN = 4;
+    const int SDC_PIN = 15;
 #else
     #include <ESP8266WiFi.h>
     #include "ESP8266HTTPClient.h"
     #include "ESP8266httpUpdate.h"
     #include <ESP8266HTTPClient.h>
+    #include <ESP8266WebServer.h>
+    // Display Settings
+    const int SDA_PIN = D1;
+    const int SDC_PIN = D2;
 #endif
 
 #ifdef VS1053_MODULE
@@ -26,8 +35,8 @@
 
   #ifdef ESP32
     #define VS1053_CS     5   // D1 // 5
-    #define VS1053_DCS    16  // D0 // 16
-    #define VS1053_DREQ   4   // D3 // 4
+    #define VS1053_DCS    17  // D0 // 16
+    #define VS1053_DREQ   2   // D3 // 4
   #else // ESP8266
     #define VS1053_CS     D4 // was D1
     #define VS1053_DCS    D0 // 16
@@ -47,17 +56,6 @@
   #include "AudioGeneratorMP3.h"
   #include "AudioOutputI2SNoDAC.h"
 #endif
-
-#ifdef ESP32
-#include <WebServer.h> 
-#else
-#include <ESP8266WebServer.h>     //Local WebServer used to serve the configuration portal
-#endif
-
-// Display Settings
-const int I2C_DISPLAY_ADDRESS = 0x3c;
-const int SDA_PIN = D1;
-const int SDC_PIN = D2;
 
 // Initialize the oled display for address 0x3c
 SSD1306Wire     display(I2C_DISPLAY_ADDRESS, SDA_PIN, SDC_PIN);
@@ -105,12 +103,19 @@ void LoadPlugin(const uint16_t* plugin, uint16_t plugin_size) {
 
 
 void setup() {
+    #ifdef ESP32
+      pinMode(16,OUTPUT);
+      digitalWrite(16, LOW); // set GPIO16 low to reset OLED
+      delay(50);
+      digitalWrite(16, HIGH);
+    #endif
+
     // initialize display
     display.init();
     display.clear();
     display.setFont(ArialMT_Plain_10);
     display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.setContrast(255);
+    display.setContrast(80);
     
     viCnxAttempt = 0;
     WiFiManager wifiManager;
@@ -135,23 +140,24 @@ void setup() {
         #endif
     #endif
 
-    display.drawString(64, 10, "playing music..");
-    display.display();
-    
     udp.begin(UDP_PORT);
     connectToLMS();
+    display.clear();
 }
 
-int oldVol;
-int oldBuf;
-const char *oldTitle;
 const char *title;
 const char *artist;
+const char *oldTitle;
 int progress;
+int oldVol;
+int oldBuf;
+int oldProgress;
 
 void loop() {
     if (vislimCli->vcPlayerStat != vislimCli->PlayStatus && (millis() - lastRetry) > 30000) {
-        lastRetry = millis();
+      lastRetry = millis();
+
+      #ifndef ESP32
         t_httpUpdate_return ret = ESPhttpUpdate.update("192.168.0.1", 80, "/esp8266/ota.php", "0.1");
 
         switch(ret) {
@@ -168,8 +174,9 @@ void loop() {
                 Serial.println("HTTP_UPDATE_OK");
                 break;
         }
+      #endif
     }
-
+    
     if (client.connected()) {
         if (!vislimCli->HandleMessages()) {
             connectToLMS();
@@ -178,13 +185,12 @@ void loop() {
     }
     yield();
 
-
     int newVol = int(vislimCli->newvolume);
-    if ((millis() - lastRetry) > 3000 || newVol != oldVol) {
+    if (newVol != oldVol || (millis() - lastRetry) > 3000) {
       lastRetry = millis();
       http.begin("http://192.168.0.1:9000/jsonrpc.js");
       String req = "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"00:00:00:00:00:01\",[\"status\",\"-\",1,\"tags:ad\"]]}";
-      int httpCode = http.POST(req);   //Send the request
+      int httpCode = http.POST(req);
       deserializeJson(root, http.getString());
       if (root["result"]["playlist_loop"][0]["title"] != "") {
         title = root["result"]["playlist_loop"][0]["title"];
@@ -194,19 +200,19 @@ void loop() {
       http.end();
    
       int newBuf = int(vislimCli->vcRingBuffer->dataSize()/vislimCli->vcRingBuffer->getBufferSize()*100);
-      if (newBuf == 0) newBuf = 100;
-      if (newVol != oldVol || newBuf != oldBuf || title != oldTitle) {
-        display.clear();
+      if (newVol != oldVol || ((newBuf != oldBuf || title != oldTitle || progress != oldProgress) && (progress >= 0 && progress <= 100)) ) {
         oldVol = newVol;
         oldBuf = newBuf;
         oldTitle = title;
+        oldProgress = progress;
         display.setTextAlignment(TEXT_ALIGN_LEFT);
-
+        
+        display.clear();
         display.drawString(0, 0, artist);
         display.drawString(0, 12, title);
         drawProgress(&display, progress, "Pro", 26);
-        drawProgress(&display, oldVol, "Vol", 39);
-        drawProgress(&display, oldBuf, "Buf", 52);
+        drawProgress(&display, newVol, "Vol", 39);
+        drawProgress(&display, newBuf, "Buf", 52);
         display.display();        
       }
     }
