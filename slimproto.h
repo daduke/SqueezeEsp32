@@ -20,11 +20,13 @@
     #include <ESP8266WiFi.h>	
 #endif
 
-#ifdef ADAFRUIT_VS1053
+#ifdef VS1053_MODULE
+  #ifdef ADAFRUIT_VS1053
     #include <Adafruit_VS1053.h>
   #else
     #include <VS1053.h>
   #endif
+#endif
 
 
 struct __attribute__((packed)) StrmStructDef
@@ -170,14 +172,16 @@ typedef struct audg_packet AudgStruct;
 class slimproto
 {
 public:
-      #ifdef ADAFRUIT_VS1053
-        slimproto(String pAdrLMS, WiFiClient pClient, Adafruit_VS1053 * pPlayer);
-      #else
-        slimproto(String pAdrLMS,WiFiClient * pClient, VS1053 * pPlayer);
+      #ifdef VS1053_MODULE
+        #ifdef ADAFRUIT_VS1053
+          slimproto(String pAdrLMS, WiFiClient pClient, Adafruit_VS1053 * pPlayer);
+        #else
+          slimproto(String pAdrLMS,WiFiClient * pClient, VS1053 * pPlayer);
+        #endif
       #endif
 
 			
-      slimproto(WiFiClient * pClient);
+      slimproto(String pAdrLMS, WiFiClient * pClient);
       ~slimproto();
 			
 			/**
@@ -194,7 +198,7 @@ public:
       };
       
       u32_t newvolume;
-     stRingBuffer * vcRingBuffer;
+      stRingBuffer * vcRingBuffer;
       unsigned long StartTimeCurrentSong = 0;
  
       player_status vcPlayerStat = StopStatus ;    /* 0 = stop , 1 = play , 2 = pause */
@@ -207,7 +211,7 @@ private:
 
       int vcCommandSize;
 
-       uint8_t*         ringbuf ;                                 // Ringbuffer for VS1053
+     //  uint8_t*         ringbuf ;                                 // Ringbuffer for VS1053
 
       unsigned long EndTimeCurrentSong = 0;
       uint32_t      ByteReceivedCurrentSong = 0;
@@ -246,12 +250,22 @@ private:
       */
 
 
-      #ifdef ADAFRUIT_VS1053
-        Adafruit_VS1053 * vcplayer;
-      #else
-         VS1053 * vcplayer;
+      #ifdef VS1053_MODULE
+        #ifdef ADAFRUIT_VS1053
+          Adafruit_VS1053 * vcplayer;
+        #else
+          VS1053 * vcplayer;
+        #endif
       #endif
 
+      
+      #ifdef I2S_DAC_MODULE
+        AudioGenerator *            vcDacAudioGen = 0;
+        AudioFileSourceICYStream *  vcDacFile = 0;
+        AudioFileSourceBuffer *     vcDacBuff = 0;
+        AudioOutputI2S *            vcDacOut = 0;
+      #endif
+      
 
 
       
