@@ -156,13 +156,12 @@ void setup() {
 
 const char *title;
 const char *artist;
-const char *oldTitle;
-int progress;
 int oldVol;
-int newVol;
 int oldBuf;
-int newBuf;
 int oldProgress;
+int newVol;
+int newBuf;
+int newProgress;
 
 void loop() {
     if (vislimCli->vcPlayerStat != vislimCli->PlayStatus && (millis() - lastRetry) > 30000) {
@@ -200,37 +199,43 @@ void loop() {
     }
 
     newVol = vislimCli->dispVolume;
-    if (newVol != oldVol || (millis() - lastRetry) > 3000) {
-      lastRetry = millis();
+    if (newVol != oldVol) {
+      oldVol = newVol;
+      updateDisplay();
+    } else if ((millis() - lastRetry) > 3000) {
+      vislimCli->HandleAudio(); //fill audio buffer before request
       http.begin("http://192.168.0.1:9000/jsonrpc.js");
       String req = "{\"id\":1,\"method\":\"slim.request\",\"params\":[\"00:00:00:00:00:01\",[\"status\",\"-\",1,\"tags:ad\"]]}";
       int httpCode = http.POST(req);
       deserializeJson(root, http.getString());
       if (root["result"]["playlist_loop"][0]["title"] != "") {
-        title = root["result"]["playlist_loop"][0]["title"];
-        artist = root["result"]["playlist_loop"][0]["artist"];
-        progress = (int)((lastRetry - vislimCli->StartTimeCurrentSong) / (10*(float)root["result"]["playlist_loop"][0]["duration"]));
+        if (root["result"]["playlist_loop"][0]["title"] != "")  title = root["result"]["playlist_loop"][0]["title"];
+        if (root["result"]["playlist_loop"][0]["artist"] != "") artist = root["result"]["playlist_loop"][0]["artist"];
+        newProgress = (int)((lastRetry - vislimCli->StartTimeCurrentSong) / (10*(float)root["result"]["playlist_loop"][0]["duration"]));
+        if (newProgress < 0 || newProgress > 100) newProgress = oldProgress;
       }
       http.end();
    
       newBuf = int(vislimCli->vcRingBuffer->dataSize()/vislimCli->vcRingBuffer->getBufferSize()*100);
-      if (newVol != oldVol || ((newBuf != oldBuf || title != oldTitle || progress != oldProgress) && (progress >= 0 && progress <= 100)) ) {
-        oldVol = newVol;
+      if (newBuf != oldBuf || newProgress != oldProgress) {
         oldBuf = newBuf;
-        oldTitle = title;
-        oldProgress = progress;
-        display.setTextAlignment(TEXT_ALIGN_LEFT);
-
-        vislimCli->HandleAudio(); //fill audio buffer before drawing
-        display.clear();
-        display.drawString(0, 0, artist);
-        display.drawString(0, 12, title);
-        drawProgress(&display, progress, "Pro", 26);
-        drawProgress(&display, newVol, "Vol", 39);
-        drawProgress(&display, newBuf, "Buf", 52);
-        display.display();        
+        oldProgress = newProgress;
+        updateDisplay();
       }
     }
+}
+
+void updateDisplay() {
+  lastRetry = millis();
+  vislimCli->HandleAudio(); //fill audio buffer before drawing
+  display.clear();
+  display.setTextAlignment(TEXT_ALIGN_LEFT);
+  display.drawString(0, 0, artist);
+  display.drawString(0, 12, title);
+  drawProgress(&display, newProgress, "Pro", 26);
+  drawProgress(&display, newVol, "Vol", 39);
+  drawProgress(&display, newBuf, "Buf", 52);
+  display.display();          
 }
 
 void connectToLMS() {
