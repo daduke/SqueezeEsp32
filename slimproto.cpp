@@ -584,12 +584,15 @@ void slimproto::HandleAudgCmd(byte pCommand [], int pSize)
   audg_packet viVolDef;
   memcpy(&viVolDef, pCommand, sizeof(audg_packet));
   u32_t viVol = unpackN((u32_t*) (pCommand+14)) ;
+  u32_t newvolume = ((100 * log10((viVol*100)/65))/5);
+  dispVolume = (newvolume - 50) * 2;
   
   Serial.print("Volume : ");  
-  Serial.println(viVol); 
-  u32_t  newvolume = ((100 * log10((viVol*100)/65))/5);
-  Serial.print("new volume  : ");  
-  Serial.println(newvolume);
+  Serial.print(viVol); 
+  Serial.print(" / ");  
+  Serial.print(newvolume);
+  Serial.print(" / ");  
+  Serial.println(dispVolume);
 
   #ifdef ADAFRUIT_VS1053
      vcplayer->setVolume((viVol  *100) / 65536,(viVol  *100) / 65536);

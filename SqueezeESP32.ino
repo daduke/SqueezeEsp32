@@ -159,7 +159,9 @@ const char *artist;
 const char *oldTitle;
 int progress;
 int oldVol;
+int newVol;
 int oldBuf;
+int newBuf;
 int oldProgress;
 
 void loop() {
@@ -197,7 +199,7 @@ void loop() {
       connectToLMS();
     }
 
-    int newVol = int(vislimCli->newvolume);
+    newVol = vislimCli->dispVolume;
     if (newVol != oldVol || (millis() - lastRetry) > 3000) {
       lastRetry = millis();
       http.begin("http://192.168.0.1:9000/jsonrpc.js");
@@ -211,7 +213,7 @@ void loop() {
       }
       http.end();
    
-      int newBuf = int(vislimCli->vcRingBuffer->dataSize()/vislimCli->vcRingBuffer->getBufferSize()*100);
+      newBuf = int(vislimCli->vcRingBuffer->dataSize()/vislimCli->vcRingBuffer->getBufferSize()*100);
       if (newVol != oldVol || ((newBuf != oldBuf || title != oldTitle || progress != oldProgress) && (progress >= 0 && progress <= 100)) ) {
         oldVol = newVol;
         oldBuf = newBuf;

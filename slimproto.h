@@ -196,8 +196,8 @@ public:
           PlayStatus,
           PauseStatus
       };
-      
-      u32_t newvolume;
+
+      int dispVolume;
       stRingBuffer * vcRingBuffer;
       unsigned long StartTimeCurrentSong = 0;
  
@@ -215,6 +215,7 @@ private:
 
       unsigned long EndTimeCurrentSong = 0;
       uint32_t      ByteReceivedCurrentSong = 0;
+      u32_t newvolume;
 
       unsigned long TimeCounter = 0;
 
