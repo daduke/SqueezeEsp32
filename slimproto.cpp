@@ -91,7 +91,7 @@ void reponseSTAT::sendResponse()
 
 #ifdef VS1053_MODULE
 #ifdef ADAFRUIT_VS1053
-  slimproto::slimproto(String pAdrLMS, WiFiClient pClient, Adafruit_VS1053 * pPlayer)
+  slimproto::slimproto(String pAdrLMS, WiFiClient * pClient, Adafruit_VS1053 * pPlayer)
 #else
   slimproto::slimproto(String pAdrLMS, WiFiClient * pClient, VS1053 * pPlayer)
 #endif
@@ -161,6 +161,7 @@ int slimproto::HandleMessages()
 {
 uint8_t viBuffer;
 int    viSizeRead;
+ if (DEBUG) Serial.println("in HandleMessages ");
 
  if(vcClient->connected())
   {

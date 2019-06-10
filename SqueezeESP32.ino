@@ -1,12 +1,10 @@
-#include <Arduino.h>
 #include "config.h"
+#include <WiFiManager.h>
+#include <DNSServer.h>
 #include <WiFiUdp.h>
 #include "slimproto.h"
-#include <DNSServer.h>            //Local DNS Server used for redirecting all requests to the configuration portal
-#include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager WiFi Configuration Magic
 #include "SSD1306Wire.h"
 #include "OLEDDisplayUi.h"
-#include "Wire.h"
 #include "WeatherStationFonts.h"
 #include <ArduinoJson.h>
 
@@ -103,11 +101,28 @@ void LoadPlugin(const uint16_t* plugin, uint16_t plugin_size) {
 
 
 void setup() {
+    Serial.begin(115200);
+    Serial.println("Connecting to WiFi");
+    WiFiManager wifiManager;
+    wifiManager.autoConnect("SqueezeEsp");
+ 
+    while (WiFi.status() != WL_CONNECTED) { // Wait for the Wi-Fi to connect
+      delay(500);
+      Serial.print('.');
+    }
+ 
+    Serial.println('\n');
+    Serial.println("Connection established!");  
+    Serial.print("IP address:\t");
+    Serial.println(WiFi.localIP()); 
+
     #ifdef ESP32
       pinMode(16,OUTPUT);
       digitalWrite(16, LOW); // set GPIO16 low to reset OLED
       delay(50);
       digitalWrite(16, HIGH);
+
+      WiFi.setSleep(false);
     #endif
 
     // initialize display
@@ -118,13 +133,7 @@ void setup() {
     display.setContrast(80);
     
     viCnxAttempt = 0;
-    WiFiManager wifiManager;
-    wifiManager.autoConnect("SqueezeEsp");
-
-    Serial.begin(115200);
-    delay(1000);
-    Serial.println("Connecting to WiFi");
-
+    
     SPI.begin();
     #ifdef VS1053_MODULE
         viplayer.begin();
@@ -179,11 +188,14 @@ void loop() {
     
     if (client.connected()) {
         if (!vislimCli->HandleMessages()) {
+            Serial.println("reconnect 1");
             connectToLMS();
         }
         vislimCli->HandleAudio();
+    } else {
+      Serial.println("reconnect 2");
+      connectToLMS();
     }
-    yield();
 
     int newVol = int(vislimCli->newvolume);
     if (newVol != oldVol || (millis() - lastRetry) > 3000) {
@@ -206,7 +218,8 @@ void loop() {
         oldTitle = title;
         oldProgress = progress;
         display.setTextAlignment(TEXT_ALIGN_LEFT);
-        
+
+        vislimCli->HandleAudio(); //fill audio buffer before drawing
         display.clear();
         display.drawString(0, 0, artist);
         display.drawString(0, 12, title);
@@ -257,7 +270,7 @@ void connectToLMS() {
         #ifdef VS1053_MODULE
             vislimCli = new slimproto(LMS_addr.toString(), & client, &viplayer);
         #else
-            vislimCli = new slimproto(LMS_addr.toString(), client);
+            vislimCli = new slimproto(LMS_addr.toString(), & client);
         #endif
 
         Serial.println("Connection Ok, send hello to LMS");
